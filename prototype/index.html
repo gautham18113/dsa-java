@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>ClipHUD — v1 Glance Display Prototype</title>
+<style>
+  :root {
+    --hud: #5ff6e0;          /* monochrome combiner tint */
+    --hud-dim: #2bbfae;
+    --glow: 0 0 6px rgba(95, 246, 224, 0.55);
+    --panel-bg: rgba(4, 18, 16, 0.18);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: "SF Mono", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
+    /* The "see-through" world. On a phone, hold this behind a glasses lens.
+       The dark scene stands in for the real world; only the glowing HUD is "projected". */
+    background:
+      radial-gradient(1200px 600px at 70% 20%, #11202b 0%, #0a1118 55%, #050709 100%),
+      #050709;
+    color: var(--hud);
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* Faint stand-in "world" so the HUD reads as an overlay, not a screen */
+  .world {
+    position: fixed; inset: 0; z-index: 0;
+    opacity: 0.22;
+    background-image:
+      linear-gradient(transparent 95%, rgba(255,255,255,0.06) 95%),
+      linear-gradient(90deg, transparent 95%, rgba(255,255,255,0.06) 95%);
+    background-size: 46px 46px;
+    transform: perspective(600px) rotateX(58deg) translateY(20%) scale(1.6);
+    transform-origin: center 40%;
+  }
+
+  /* ---- The monocular glance panel (the actual HUD) ---- */
+  .stage { position: fixed; inset: 0; z-index: 2; }
+
+  .hud {
+    position: absolute;
+    width: 280px;
+    padding: 14px 16px;
+    border: 1px solid var(--hud-dim);
+    border-radius: 10px;
+    background: var(--panel-bg);
+    backdrop-filter: blur(1px);
+    text-shadow: var(--glow);
+    box-shadow: inset 0 0 18px rgba(95,246,224,0.06);
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  /* monocular: anchored to one eye's corner of vision */
+  .hud.right { top: 8%; right: 7%; }
+  .hud.left  { top: 8%; left: 7%; right: auto; }
+
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; letter-spacing: .5px; color: var(--hud-dim);
+    border-bottom: 1px solid rgba(95,246,224,0.18);
+    padding-bottom: 6px; margin-bottom: 10px;
+  }
+  .statusbar .dot { color: var(--hud); }
+
+  .mode-tag {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--hud-dim); margin-bottom: 6px;
+  }
+  .title { font-size: 16px; line-height: 1.3; margin-bottom: 6px; }
+  .body  { font-size: 13px; line-height: 1.45; color: #bff7ee; text-shadow: var(--glow); }
+  .body .accent { color: var(--hud); }
+
+  .nav-arrow {
+    font-size: 40px; line-height: 1; text-align: center; margin: 4px 0 8px;
+    text-shadow: var(--glow);
+  }
+  .nav-dist { text-align: center; font-size: 22px; }
+  .nav-street { text-align: center; font-size: 12px; color: var(--hud-dim); }
+
+  .caption-orig { font-size: 11px; color: var(--hud-dim); margin-bottom: 4px; }
+
+  .ai-q { font-size: 11px; color: var(--hud-dim); margin-bottom: 6px; }
+  .cursor { display: inline-block; width: 8px; background: var(--hud);
+            animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---- Controls (not part of the device; the demo rig) ---- */
+  .rig {
+    position: fixed; z-index: 5; left: 0; right: 0; bottom: 0;
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    padding: 12px; background: rgba(0,0,0,0.55);
+    border-top: 1px solid rgba(95,246,224,0.15);
+  }
+  .rig button {
+    font-family: inherit; font-size: 12px; letter-spacing: .5px;
+    color: var(--hud); background: transparent;
+    border: 1px solid var(--hud-dim); border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; transition: all .15s;
+  }
+  .rig button:hover, .rig button.active {
+    background: rgba(95,246,224,0.12); box-shadow: var(--glow);
+  }
+  .rig .sep { width:1px; background: rgba(95,246,224,0.2); margin: 0 4px; }
+  .hint { position: fixed; z-index: 5; top: 10px; left: 50%; transform: translateX(-50%);
+          font-size: 11px; color: var(--hud-dim); letter-spacing: .5px; text-align:center; }
+</style>
+</head>
+<body>
+  <div class="world"></div>
+
+  <div class="hint">ClipHUD v1 · monocular glance display · phone-tethered · hold behind a lens to simulate the combiner</div>
+
+  <div class="stage">
+    <div class="hud right" id="hud">
+      <div class="statusbar">
+        <span id="clock">--:--</span>
+        <span><span class="dot">●</span> BLE · 🔋 <span id="batt">82%</span></span>
+      </div>
+      <div id="content"><!-- filled by JS --></div>
+    </div>
+  </div>
+
+  <div class="rig">
+    <button data-mode="notify">Notifications</button>
+    <button data-mode="nav">Navigation</button>
+    <button data-mode="caption">Live Caption</button>
+    <button data-mode="ai">AI Assistant</button>
+    <span class="sep"></span>
+    <button id="autoBtn">▶ Auto-demo</button>
+    <button id="eyeBtn">Eye: R</button>
+  </div>
+
+<script>
+(function () {
+  const content = document.getElementById('content');
+  const hud = document.getElementById('hud');
+  const clock = document.getElementById('clock');
+  const batt = document.getElementById('batt');
+
+  // ---- Scenes: each is what the glance display shows for a v1 use case ----
+  const scenes = {
+    notify: () => `
+      <div class="mode-tag">Notification</div>
+      <div class="title">Maya Chen</div>
+      <div class="body">“are we still on for the demo at 4? can’t wait to see it 👀”</div>`,
+
+    nav: (t) => {
+      const steps = [
+        { a: '↰', d: '120 m', s: 'turn onto Market St' },
+        { a: '↑', d: '60 m',  s: 'continue on Market St' },
+        { a: '↱', d: '30 m',  s: 'turn onto 4th St' },
+        { a: '⚑', d: 'Arrive', s: 'destination on right' },
+      ];
+      const st = steps[Math.floor(t/2) % steps.length];
+      return `
+        <div class="mode-tag">Navigation</div>
+        <div class="nav-arrow">${st.a}</div>
+        <div class="nav-dist">${st.d}</div>
+        <div class="nav-street">${st.s}</div>`;
+    },
+
+    caption: (t) => {
+      const lines = [
+        { o: '¿Quieres ver el prototipo?', e: 'Do you want to see the prototype?' },
+        { o: 'Lo conecté a mi teléfono.',   e: 'I tethered it to my phone.' },
+        { o: 'Se ajusta a cualquier montura.', e: 'It fits any frame.' },
+      ];
+      const ln = lines[Math.floor(t/2.5) % lines.length];
+      return `
+        <div class="mode-tag">Live Caption · ES→EN</div>
+        <div class="caption-orig">“${ln.o}”</div>
+        <div class="body"><span class="accent">${ln.e}</span></div>`;
+    },
+
+    ai: (t) => {
+      const full = "A clip-on HUD adds an AI display to glasses you already own — no new frames, lenses, or prescription. It mounts to the temple, tethers to your phone over BLE, and projects a monocular glance panel.";
+      const chars = Math.min(full.length, Math.floor(t * 14));
+      const typed = full.slice(0, chars);
+      const done = chars >= full.length;
+      return `
+        <div class="mode-tag">AI Assistant</div>
+        <div class="ai-q">“What is ClipHUD?”</div>
+        <div class="body">${typed}${done ? '' : '<span class="cursor">&nbsp;</span>'}</div>`;
+    }
+  };
+
+  let mode = 'notify';
+  let tick = 0;             // tenths of a second within current scene
+  let auto = false;
+  let eye = 'right';
+  const order = ['notify', 'nav', 'caption', 'ai'];
+  let autoTimer = 0;
+
+  function render() {
+    const fn = scenes[mode];
+    content.innerHTML = fn(tick / 10);
+  }
+
+  function setMode(m) {
+    mode = m; tick = 0; render();
+    document.querySelectorAll('.rig [data-mode]').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === m));
+    // brief fade to feel like the panel "wakes"
+    hud.style.opacity = 0; hud.style.transform = 'translateY(-6px)';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      hud.style.opacity = 1; hud.style.transform = 'translateY(0)';
+    }));
+  }
+
+  // main loop (10 Hz)
+  setInterval(() => {
+    tick++;
+    render();
+    if (auto) {
+      autoTimer++;
+      if (autoTimer >= 70) { // ~7s per scene
+        autoTimer = 0;
+        const next = order[(order.indexOf(mode) + 1) % order.length];
+        setMode(next);
+      }
+    }
+    // status bar life
+    const now = new Date();
+    clock.textContent = now.toTimeString().slice(0,5);
+  }, 100);
+
+  // slow battery drain for realism
+  let b = 82;
+  setInterval(() => { b = Math.max(60, b - 1); batt.textContent = b + '%'; }, 9000);
+
+  // controls
+  document.querySelectorAll('.rig [data-mode]').forEach(b =>
+    b.addEventListener('click', () => { auto = false; updateAutoBtn(); setMode(b.dataset.mode); }));
+
+  const autoBtn = document.getElementById('autoBtn');
+  function updateAutoBtn() {
+    autoBtn.textContent = auto ? '⏸ Auto-demo' : '▶ Auto-demo';
+    autoBtn.classList.toggle('active', auto);
+  }
+  autoBtn.addEventListener('click', () => { auto = !auto; autoTimer = 0; updateAutoBtn(); });
+
+  const eyeBtn = document.getElementById('eyeBtn');
+  eyeBtn.addEventListener('click', () => {
+    eye = eye === 'right' ? 'left' : 'right';
+    hud.classList.toggle('right', eye === 'right');
+    hud.classList.toggle('left', eye === 'left');
+    eyeBtn.textContent = 'Eye: ' + (eye === 'right' ? 'R' : 'L');
+  });
+
+  setMode('notify');
+})();
+</script>
+</body>
+</html>
