@@ -18,27 +18,37 @@
 
   body {
     font-family: "SF Mono", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
-    /* The "see-through" world. On a phone, hold this behind a glasses lens.
-       The dark scene stands in for the real world; only the glowing HUD is "projected". */
-    background:
-      radial-gradient(1200px 600px at 70% 20%, #11202b 0%, #0a1118 55%, #050709 100%),
-      #050709;
+    /* Pure black by default. This matters:
+       - On an OLED phone held behind a lens, black pixels emit NO light, so the
+         background truly "falls away" and only the glowing HUD remains.
+       - Hit "See-through" to use the live camera as the world behind the HUD
+         (the convincing demo on a laptop / LCD, where black can't fall away). */
+    background: #000;
     color: var(--hud);
     overflow: hidden;
     -webkit-user-select: none; user-select: none;
   }
 
-  /* Faint stand-in "world" so the HUD reads as an overlay, not a screen */
+  /* Live camera passthrough = the real world behind the combiner */
+  #cam {
+    position: fixed; inset: 0; z-index: 0;
+    width: 100%; height: 100%; object-fit: cover;
+    display: none;                 /* shown only in see-through mode */
+  }
+
+  /* Faint stand-in "world", only used when camera is OFF and not pure-black */
   .world {
     position: fixed; inset: 0; z-index: 0;
-    opacity: 0.22;
+    opacity: 0.18;
     background-image:
-      linear-gradient(transparent 95%, rgba(255,255,255,0.06) 95%),
-      linear-gradient(90deg, transparent 95%, rgba(255,255,255,0.06) 95%);
+      linear-gradient(transparent 95%, rgba(95,246,224,0.10) 95%),
+      linear-gradient(90deg, transparent 95%, rgba(95,246,224,0.10) 95%);
     background-size: 46px 46px;
     transform: perspective(600px) rotateX(58deg) translateY(20%) scale(1.6);
     transform-origin: center 40%;
   }
+  body.cam .world,
+  body.black .world { display: none; }   /* hide grid in camera or pure-black mode */
 
   /* ---- The monocular glance panel (the actual HUD) ---- */
   .stage { position: fixed; inset: 0; z-index: 2; }
@@ -111,9 +121,10 @@
 </style>
 </head>
 <body>
+  <video id="cam" autoplay playsinline muted></video>
   <div class="world"></div>
 
-  <div class="hint">ClipHUD v1 · monocular glance display · phone-tethered · hold behind a lens to simulate the combiner</div>
+  <div class="hint" id="hint">ClipHUD v1 · monocular glance display · tap <b>See-through</b> for camera passthrough, or <b>Pure black</b> + OLED phone behind a lens</div>
 
   <div class="stage">
     <div class="hud right" id="hud">
@@ -133,6 +144,9 @@
     <span class="sep"></span>
     <button id="autoBtn">▶ Auto-demo</button>
     <button id="eyeBtn">Eye: R</button>
+    <span class="sep"></span>
+    <button id="camBtn">📷 See-through</button>
+    <button id="blackBtn">Pure black</button>
   </div>
 
 <script>
@@ -250,6 +264,47 @@
     hud.classList.toggle('right', eye === 'right');
     hud.classList.toggle('left', eye === 'left');
     eyeBtn.textContent = 'Eye: ' + (eye === 'right' ? 'R' : 'L');
+  });
+
+  // ---- See-through (camera passthrough) ----
+  const camEl = document.getElementById('cam');
+  const camBtn = document.getElementById('camBtn');
+  const hintEl = document.getElementById('hint');
+  let stream = null;
+
+  async function toggleCam() {
+    if (stream) { // turn off
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      camEl.style.display = 'none';
+      document.body.classList.remove('cam');
+      camBtn.classList.remove('active');
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }, audio: false
+      });
+      camEl.srcObject = stream;
+      camEl.style.display = 'block';
+      document.body.classList.add('cam');
+      document.body.classList.remove('black');
+      blackBtn.classList.remove('active');
+      camBtn.classList.add('active');
+    } catch (e) {
+      hintEl.innerHTML = '⚠ Camera blocked: ' + (e && e.name || 'error') +
+        '. Camera needs https:// or localhost (file:// is blocked in some browsers). ' +
+        'Use <b>Pure black</b> + an OLED phone behind a lens instead.';
+    }
+  }
+  camBtn.addEventListener('click', toggleCam);
+
+  // ---- Pure-black mode (for the OLED-behind-a-lens trick) ----
+  const blackBtn = document.getElementById('blackBtn');
+  blackBtn.addEventListener('click', () => {
+    const on = document.body.classList.toggle('black');
+    blackBtn.classList.toggle('active', on);
+    if (on && stream) toggleCam(); // can't be see-through and pure-black at once
   });
 
   setMode('notify');

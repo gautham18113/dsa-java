@@ -10,18 +10,24 @@ It's an interactive, self-contained simulator of the glance display so you can
 
 ## Run it
 
-Open `index.html` in any browser.
+Open `index.html` in any browser. Use the buttons at the bottom to switch use
+cases or hit **Auto-demo**. There are two ways to make the background "fall away"
+so the panel reads as a floating overlay instead of a screen:
 
-- **On a laptop:** double-click the file. Use the buttons at the bottom to switch
-  use cases, or hit **Auto-demo** to cycle through all of them.
-- **On a phone (the real demo):** open the file in mobile Safari/Chrome, then
-  **hold the phone behind one lens of a pair of glasses**, screen facing your eye.
-  The dark scene drops away and only the glowing panel "floats" in the corner of
-  your vision — that's the monocular combiner experience ClipHUD recreates with
-  real optics.
+- **See-through (works anywhere, incl. laptops):** tap **📷 See-through**. The
+  page uses your **live camera as the world behind the HUD** — exactly what a real
+  combiner does (real world + projected glance panel). Note: browsers only allow
+  the camera over `https://` or `localhost`; opening via `file://` is blocked in
+  some browsers. If so, serve it locally — from this folder run
+  `python3 -m http.server` and open `http://localhost:8000`.
+- **OLED phone behind a lens (the physically honest one):** tap **Pure black**,
+  open on an **OLED phone**, then hold it behind one lens, screen toward your eye.
+  Black OLED pixels emit *no* light, so the background genuinely vanishes and only
+  the glowing panel floats — the monocular combiner experience on hardware you own.
 
-> The dark grid is a stand-in for the real world (a see-through combiner shows
-> the actual world behind it). Only the glowing cyan panel is "projected" light.
+> Why plain black on a laptop/LCD does **not** fall away: an LCD backlight is
+> always on, so "black" is just dark grey pixels, never truly dark. Only OLED
+> black is real darkness — hence the two modes above.
 
 ## What v1 actually is (the spec)
 
